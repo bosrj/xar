@@ -19,6 +19,12 @@ public class ToC {
     @ElementList(inline = true)
     private List<File> files;
 
+    @Element(required = false)
+    private Signature signature;
+
+    @Element(required = false, name = "x-signature")
+    private Signature xSignature;
+
     public Checksum getChecksum() {
         return checksum;
     }
@@ -41,5 +47,21 @@ public class ToC {
 
     public void setFiles(final List<File> files) {
         this.files = files;
+    }
+
+    public Signature getSignature() {
+        return signature;
+    }
+
+    public void setSignature(final Signature signature) {
+        this.signature = signature;
+    }
+
+    public Signature getXSignature() {
+        return xSignature;
+    }
+
+    public void setXSignature(final Signature xSignature) {
+        this.xSignature = xSignature;
     }
 }
