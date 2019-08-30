@@ -1,16 +1,23 @@
 package com.sprylab.xar;
 
 import java.io.InputStream;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
+import com.sprylab.xar.signing.checksum.ChecksumProvider;
+import com.sprylab.xar.signing.checksum.ChecksumProviderFactory;
 import com.sprylab.xar.toc.TocFactory;
+import com.sprylab.xar.toc.model.Checksum;
+import com.sprylab.xar.toc.model.Signature;
 import com.sprylab.xar.toc.model.ToC;
 import com.sprylab.xar.utils.FilePath;
 import com.sprylab.xar.utils.StringUtils;
+
+import okio.ByteString;
 
 /**
  * Describes the table of content of an eXtensible ARchiver file represented by a {@link XarSource}
@@ -26,14 +33,43 @@ public class XarToc {
 
     private final XarSource xarSource;
 
+    private ByteString calculatedChecksum = null;
+
+    private X509Certificate signCertificate;
+    private X509Certificate xSignCertificate;
+
     public XarToc(final XarSource xarSource) throws XarException {
         this.xarSource = xarSource;
-        try (final InputStream inputStream = xarSource.getToCStream()) {
+
+        final ChecksumProvider checksumProvider = ChecksumProviderFactory.fromXarSource(xarSource);
+        try (final InputStream inputStream = xarSource.getToCStream(checksumProvider)) {
             this.model = TocFactory.fromInputStream(inputStream);
             createEntries();
+
+            try {
+                calculatedChecksum = checksumProvider.getChecksum();
+            } catch (final IllegalStateException ignore) {
+                // Could not calculate checksum
+            }
         } catch (final Exception e) {
             throw new XarException("Could not create toc", e);
         }
+    }
+
+    public X509Certificate getSignCertificate() {
+        return signCertificate;
+    }
+
+    public void setSignCertificate(final X509Certificate signCertificate) {
+        this.signCertificate = signCertificate;
+    }
+
+    public X509Certificate getXSignCertificate() {
+        return xSignCertificate;
+    }
+
+    public void setXSignCertificate(final X509Certificate xSignCertificate) {
+        this.xSignCertificate = xSignCertificate;
     }
 
     private void createEntries() throws XarException {
@@ -82,5 +118,21 @@ public class XarToc {
 
     public boolean hasEntry(final String entryName) {
         return nameToEntryMap.containsKey(entryName);
+    }
+
+    public Checksum getChecksum() {
+        return model.getChecksum();
+    }
+
+    public Signature getSignature() {
+        return model.getSignature();
+    }
+
+    public Signature getXSignature() {
+        return model.getXSignature();
+    }
+
+    public ByteString getCalculatedChecksum() {
+        return calculatedChecksum;
     }
 }

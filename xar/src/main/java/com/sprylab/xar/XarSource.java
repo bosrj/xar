@@ -9,9 +9,12 @@ import java.util.zip.Inflater;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.sprylab.xar.signing.TocCertificateParser;
+import com.sprylab.xar.signing.checksum.ChecksumProvider;
 import com.sprylab.xar.toc.model.Encoding;
 
 import okio.BufferedSource;
+import okio.ByteString;
 import okio.InflaterSource;
 import okio.Okio;
 import okio.Source;
@@ -25,6 +28,14 @@ public abstract class XarSource {
     private XarHeader header;
 
     private XarToc toc;
+
+    private ByteString storedChecksum;
+
+    private boolean forceVerifyCerts;
+
+    public XarSource() {
+        forceVerifyCerts = false;
+    }
 
     /**
      * @return the {@link XarHeader} of this source
@@ -47,6 +58,26 @@ public abstract class XarSource {
     }
 
     /**
+     * @return the stored checksum of the ToC
+     * @throws XarException when there is an error while reading
+     */
+    public ByteString getStoredChecksum() throws XarException {
+        ensureStoredChecksum();
+        return storedChecksum;
+    }
+
+    /**
+     * If this setting is enabled, the step to extract the certificates for the signature and x-signature while reading the {@link XarToc}
+     * in {@link #getToc()} should succeed, or a {@link XarException} will be thrown. If disabled, this step will fail silently if the certificates cannot
+     * be extracted.
+     *
+     * @param forceVerifyCerts whether this setting is enabled
+     */
+    public void setForceVerifyCerts(final boolean forceVerifyCerts) {
+        this.forceVerifyCerts = forceVerifyCerts;
+    }
+
+    /**
      * Gets access to the underlying byte data of this file's table of content.
      * <p>
      * If the data is encoded (see {@link Encoding}), then it will be decompressed while reading from the returned {@link Source}.
@@ -55,9 +86,29 @@ public abstract class XarSource {
      * @throws IOException when an I/O error occurred while reading
      */
     public BufferedSource getToCSource() throws IOException {
+        return getToCSource(null);
+    }
+
+    /**
+     * Gets access to the underlying byte data of this file's table of content.
+     * <p>
+     * If the data is encoded (see {@link Encoding}), then it will be decompressed while reading from the returned {@link Source}.
+     *
+     * @param checksumProvider a provider for calculating the ToC checksum
+     * @return the {@link Source} to read the table of contents from
+     * @throws IOException when an I/O error occurred while reading
+     */
+    public BufferedSource getToCSource(final ChecksumProvider checksumProvider) throws IOException {
         final long headerSize = getHeader().getSize().longValue();
         final long compressedTocSize = getHeader().getTocLengthCompressed().longValue();
-        return Okio.buffer(new InflaterSource(getRange(headerSize, compressedTocSize), new Inflater()));
+
+        Source tocSource = getRange(headerSize, compressedTocSize);
+
+        if (checksumProvider != null) {
+            tocSource = checksumProvider.wrap(tocSource);
+        }
+
+        return Okio.buffer(new InflaterSource(tocSource, new Inflater()));
     }
 
     /**
@@ -67,7 +118,18 @@ public abstract class XarSource {
      * @throws IOException when an I/O error occurred while reading
      */
     public InputStream getToCStream() throws IOException {
-        return Okio.buffer(getToCSource()).inputStream();
+        return getToCStream(null);
+    }
+
+    /**
+     * Gets access to the underlying byte data of this file's table of content as an {@link InputStream}.
+     *
+     * @param checksumProvider a provider for calculating the ToC checksum
+     * @return an (uncompressed) {@link InputStream} to read the table of contents from
+     * @throws IOException when an I/O error occurred while reading
+     */
+    public InputStream getToCStream(final ChecksumProvider checksumProvider) throws IOException {
+        return Okio.buffer(getToCSource(checksumProvider)).inputStream();
     }
 
     /**
@@ -120,7 +182,7 @@ public abstract class XarSource {
      */
     public boolean hasEntry(final String entryName) throws XarException {
         return getToc().hasEntry(entryName);
-    };
+    }
 
     /**
      * Convenience method for extracting all files bypassing integrity check.
@@ -167,6 +229,17 @@ public abstract class XarSource {
     }
 
     /**
+     * Reads the stored ToC checksum if necessary
+     *
+     * @throws XarException when there is an error while reading
+     */
+    private void ensureStoredChecksum() throws XarException {
+        if (storedChecksum == null) {
+            storedChecksum = createStoredChecksum();
+        }
+    }
+
+    /**
      * Creates the {@link XarToc} if necessary.
      *
      * @throws XarException when there is an error while reading
@@ -174,6 +247,16 @@ public abstract class XarSource {
     private void ensureToc() throws XarException {
         if (toc == null) {
             toc = createToc();
+
+            try {
+                checkTocSignature();
+            } catch (final XarException e) {
+                if (forceVerifyCerts) {
+                    throw new XarException("Cannot parse signing certificates", e);
+                } else {
+                    LOG.info("Could not parse signing certificates, exception suppressed");
+                }
+            }
         }
     }
 
@@ -185,6 +268,23 @@ public abstract class XarSource {
     private void ensureHeader() throws XarException {
         if (header == null) {
             header = createHeader();
+        }
+    }
+
+    /**
+     * Reads the stored ToC checksum
+     *
+     * @return the stored checksum
+     * @throws XarException when there is an error while reading
+     */
+    private ByteString createStoredChecksum() throws XarException {
+        final long baseOffset = getHeader().getSize().longValue() + header.getTocLengthCompressed().longValue();
+
+        try (final BufferedSource source = getRange(baseOffset,
+                                                    getToc().getChecksum().getSize())) {
+            return source.readByteString(getToc().getChecksum().getSize());
+        } catch (final IOException e) {
+            throw new XarException("Error reading stored checksum", e);
         }
     }
 
@@ -206,6 +306,23 @@ public abstract class XarSource {
      */
     private XarHeader createHeader() throws XarException {
         return new XarHeader(this);
+    }
+
+    /**
+     * Extracts the certificates for the signature and x-signature in the {@link com.sprylab.xar.toc.model.ToC ToC} and stores these in the XarToc.
+     *
+     * @throws XarException when there is an error while extracting the certificates
+     */
+    private void checkTocSignature() throws XarException {
+        final TocCertificateParser certificateParser = new TocCertificateParser(this);
+        certificateParser.parse();
+
+        if (certificateParser.getSignCertificate() != null) {
+            toc.setSignCertificate(certificateParser.getSignCertificate());
+        }
+        if (certificateParser.getXSignCertificate() != null) {
+            toc.setXSignCertificate(certificateParser.getXSignCertificate());
+        }
     }
 
     /**
