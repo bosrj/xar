@@ -2,7 +2,6 @@ package com.sprylab.xar.toc.model;
 
 import com.sprylab.xar.XarException;
 import com.sprylab.xar.XarSource;
-
 import okio.ByteString;
 
 public enum ChecksumAlgorithm {

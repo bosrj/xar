@@ -7,14 +7,30 @@ import org.simpleframework.xml.Root;
 @Root
 public class Checksum {
 
-    @Attribute
     private ChecksumAlgorithm style;
 
-    @Element
     private long size;
 
-    @Element
     private long offset;
+
+    public Checksum(@Attribute(name = "style") final String style,
+                    @Element(name = "size") final long size,
+                    @Element(name = "offset") final long offset) {
+        this(ChecksumAlgorithm.valueOf(style.toUpperCase()), size, offset);
+    }
+
+    public Checksum(final ChecksumAlgorithm style,
+                    final long size,
+                    final long offset) {
+        this.style = style;
+        this.size = size;
+        this.offset = offset;
+    }
+
+    @Attribute(name = "style")
+    public String getStyleRaw() {
+        return style.name().toLowerCase();
+    }
 
     public ChecksumAlgorithm getStyle() {
         return style;
@@ -24,6 +40,7 @@ public class Checksum {
         this.style = style;
     }
 
+    @Element(name = "size")
     public long getSize() {
         return size;
     }
@@ -32,6 +49,7 @@ public class Checksum {
         this.size = size;
     }
 
+    @Element(name = "offset")
     public long getOffset() {
         return offset;
     }

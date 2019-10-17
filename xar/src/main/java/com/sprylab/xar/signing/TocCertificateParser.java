@@ -19,8 +19,6 @@ import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.SignerInformationVerifier;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
 import org.bouncycastle.operator.OperatorCreationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.sprylab.xar.XarException;
 import com.sprylab.xar.XarSource;
@@ -184,14 +182,13 @@ public class TocCertificateParser {
 
             final Collection<SignerInformation> signers = signedData.getSignerInfos().getSigners();
             for (final SignerInformation signer : signers) {
-                final ByteString sign = ByteString.of(signer.getSignature());
                 final SignerInformationVerifier verifier = new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(lastCertHolder);
 
                 if (!signer.verify(verifier)) {
                     throw new SignatureException("Signature does not match");
                 }
             }
-        } catch (final CMSException | OperatorCreationException | java.security.cert.CertificateException e) {
+        } catch (final CMSException | OperatorCreationException | CertificateException e) {
             throw new SignatureException("Invalid CMS signature: " + e.getMessage());
         }
     }

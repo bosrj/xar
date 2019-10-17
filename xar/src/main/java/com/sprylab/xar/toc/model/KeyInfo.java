@@ -17,7 +17,7 @@ public class KeyInfo {
         try {
             final Base64 encoder = new Base64(76);
             return new String(encoder.encode(cert.getEncoded()));
-        } catch (CertificateEncodingException e) {
+        } catch (final CertificateEncodingException e) {
             throw new RuntimeException(e);
         }
     }
