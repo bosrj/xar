@@ -178,49 +178,51 @@ public class XarSink {
     }
 
     public void write(final OutputStream output) throws Exception {
-        final Buffer buffer = new Buffer();
+        try (final Buffer buffer = new Buffer()) {
+            final long tocBufferSize;
+            final Buffer tocCompressedBuffer;
+            try (final Buffer tocBuffer = new Buffer()) {
+                TocFactory.toOutputStream(toc, tocBuffer.outputStream());
+                tocBufferSize = tocBuffer.size();
 
-        final long tocBufferSize;
-        final Buffer tocCompressedBuffer;
-        try (final Buffer tocBuffer = new Buffer()) {
-            TocFactory.toOutputStream(toc, tocBuffer.outputStream());
-            tocBufferSize = tocBuffer.size();
+                tocCompressedBuffer = new Buffer();
 
-            tocCompressedBuffer = new Buffer();
-
-            try (final Sink deflaterSink = new DeflaterSink(tocCompressedBuffer, new Deflater(Deflater.BEST_COMPRESSION))) {
-                deflaterSink.write(tocBuffer, tocBuffer.size());
-            }
-        }
-
-        final ByteString tocCompressed = tocCompressedBuffer.readByteString(tocCompressedBuffer.size());
-        final ByteString tocCompressedBufferHash = checksumAlgorithm.performHash(tocCompressed);
-
-        buffer.write(XarHeader.createHeader(tocCompressed.size(), tocBufferSize, checksumAlgorithm));
-        buffer.write(tocCompressed);
-
-        if (tocCompressedBufferHash != null) {
-            buffer.write(tocCompressedBufferHash);
-
-            if (hasSigning()) {
-                if (toc.getSignature() != null) {
-                    buffer.write(createRSASignature(tocCompressedBufferHash));
-                }
-
-                if (toc.getXSignature() != null) {
-                    buffer.write(createCMSSignature(tocCompressedBufferHash));
+                try (final Sink deflaterSink = new DeflaterSink(tocCompressedBuffer, new Deflater(Deflater.BEST_COMPRESSION))) {
+                    deflaterSink.write(tocBuffer, tocBuffer.size());
                 }
             }
-        }
 
-        for (final XarEntrySource xs : sources) {
-            try (final BufferedSource source = Okio.buffer(xs.getSource())) {
-                buffer.writeAll(source);
+            final ByteString tocCompressed = tocCompressedBuffer.readByteString(tocCompressedBuffer.size());
+            final ByteString tocCompressedBufferHash = checksumAlgorithm.performHash(tocCompressed);
+
+            buffer.write(XarHeader.createHeader(tocCompressed.size(), tocBufferSize, checksumAlgorithm));
+            buffer.write(tocCompressed);
+
+            if (tocCompressedBufferHash != null) {
+                buffer.write(tocCompressedBufferHash);
+
+                if (hasSigning()) {
+                    if (toc.getSignature() != null) {
+                        buffer.write(createRSASignature(tocCompressedBufferHash));
+                    }
+
+                    if (toc.getXSignature() != null) {
+                        buffer.write(createCMSSignature(tocCompressedBufferHash));
+                    }
+                }
             }
-        }
 
-        try (final Sink sink = Okio.sink(output)) {
-            buffer.readAll(sink);
+            try (final Sink sink = Okio.sink(output)) {
+                // Write header and ToC
+                buffer.readAll(sink);
+
+                // Write entries
+                for (final XarEntrySource xs : sources) {
+                    try (final BufferedSource source = Okio.buffer(xs.getSource())) {
+                        source.readAll(sink);
+                    }
+                }
+            }
         }
     }
 
