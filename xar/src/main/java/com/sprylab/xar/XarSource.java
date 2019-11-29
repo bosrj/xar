@@ -258,6 +258,16 @@ public abstract class XarSource {
     private void ensureToc() throws XarException {
         if (toc == null) {
             toc = createToc();
+
+            try {
+                checkTocSignature();
+            } catch (final XarException e) {
+                if (verifyCerts) {
+                    throw new XarException("Cannot parse signing certificates", e);
+                } else {
+                    LOG.info("Could not parse signing certificates, exception suppressed");
+                }
+            }
         }
     }
 
