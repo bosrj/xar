@@ -227,11 +227,12 @@ public class XarSink {
     }
 
     private byte[] createRSASignature(final ByteString tocCompressedBufferHash)
-        throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
-        final java.security.Signature sigAlg = java.security.Signature.getInstance(toc.getSignature().getStyle());
+        throws NoSuchAlgorithmException, InvalidKeyException, SignatureException
+    {
+        final String signatureStyle = checksumAlgorithm.toString().toUpperCase() + "with" + toc.getSignature().getStyle();
+        final java.security.Signature sigAlg = java.security.Signature.getInstance(signatureStyle);
 
         sigAlg.initSign(signKey);
-        sigAlg.update(checksumAlgorithm.getDigestHeader().asByteBuffer());
         sigAlg.update(tocCompressedBufferHash.asByteBuffer());
         final byte[] signature = sigAlg.sign();
         if (signature.length != toc.getSignature().getSize()) {
@@ -241,7 +242,8 @@ public class XarSink {
     }
 
     private ByteString createCMSSignature(final ByteString checksum)
-        throws OperatorCreationException, CertificateException, IOException, CMSException {
+        throws OperatorCreationException, CertificateException, IOException, CMSException
+    {
         final CMSSignedDataGenerator generator = new CMSSignedDataGenerator();
 
         // Add the signing info
