@@ -64,7 +64,7 @@ public class XarPacker {
      * @throws Exception if an error occurred
      */
     public void addDirectory(final File folder, final boolean asSubFolder, final Set<String> packedExtensions) throws Exception {
-        addDirectory(folder, asSubFolder, packedExtensions, ChecksumAlgorithm.NONE);
+        addDirectory(folder, asSubFolder, packedExtensions, null, ChecksumAlgorithm.NONE);
     }
 
     /**
@@ -74,19 +74,22 @@ public class XarPacker {
      * @param asSubFolder       {@code true}, if the folder itself should be added to the archive, {@code false} if only it's content
      * @param packedExtensions  a set with all extensions, which should be compressed - if {@code null}, a default list of extensions
      *                          to be compressed will be used
+     * @param packedFiles       a set with all filenames which should be compressed - if {@code null}, no files should be compressed, other
+     *                          than those marked in {@code packedExtensions}
      * @param checksumAlgorithm the checksum algorithm to be used for the files in the folder
      * @throws Exception if an error occurred
      */
     public void addDirectory(final File folder,
                              final boolean asSubFolder,
                              final Set<String> packedExtensions,
+                             final Set<String> packedFiles,
                              final ChecksumAlgorithm checksumAlgorithm) throws Exception {
         XarDirectory root = null;
         if (asSubFolder) {
             root = new XarSimpleDirectory(folder.getName());
             sink.addDirectory(root, null);
         }
-        addDirectoryContent(folder, root, packedExtensions == null ? DEFAULT_PACK_EXTENSIONS : null, checksumAlgorithm);
+        addDirectoryContent(folder, root, packedExtensions == null ? DEFAULT_PACK_EXTENSIONS : null, packedFiles == null ? DEFAULT_PACK_FILES : packedFiles, checksumAlgorithm);
     }
 
     /**
@@ -99,7 +102,7 @@ public class XarPacker {
      * @throws Exception if an error occurred
      */
     public void addDirectoryContent(final File folder, final XarDirectory parent, final Set<String> packedExtensions) throws Exception {
-        addDirectoryContent(folder, parent, packedExtensions, ChecksumAlgorithm.NONE);
+        addDirectoryContent(folder, parent, packedExtensions, null, ChecksumAlgorithm.NONE);
     }
 
     /**
@@ -109,20 +112,23 @@ public class XarPacker {
      * @param parent            the parent folder in the xar archive
      * @param packedExtensions  a set with all extensions, which should be compressed - if {@code null}, a default list of extensions
      *                          to be compressed will be used
+     * @param packedFiles       a set with all filenames which should be compressed - if {@code null}, no files should be compressed, other
+     *                          than those marked in {@code packedExtensions}
      * @param checksumAlgorithm the checksum algorithm to be used for the file
      * @throws Exception if an error occurred
      */
     public void addDirectoryContent(final File folder,
                                     final XarDirectory parent,
                                     final Set<String> packedExtensions,
+                                    final Set<String> packedFiles,
                                     final ChecksumAlgorithm checksumAlgorithm) throws Exception {
         for (final File file : folder.listFiles()) {
             if (file.isDirectory()) {
                 final XarDirectory dir = new XarSimpleDirectory(file.getName());
                 sink.addDirectory(dir, parent);
-                addDirectoryContent(file, dir, packedExtensions, checksumAlgorithm);
+                addDirectoryContent(file, dir, packedExtensions, packedFiles, checksumAlgorithm);
             } else {
-                final boolean compress = packedExtensions.contains(StringUtils.substringAfterLast(file.getName(), "."));
+                final boolean compress = packedFiles.contains(file.getName()) || packedExtensions.contains(StringUtils.substringAfterLast(file.getName(), "."));
                 final XarEntrySource source = new XarFileSource(file, compress ? Encoding.GZIP : Encoding.NONE, checksumAlgorithm);
                 sink.addSource(source, parent);
             }
@@ -139,5 +145,4 @@ public class XarPacker {
             sink.write(fos);
         }
     }
-
 }
