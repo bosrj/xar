@@ -15,6 +15,8 @@ public class EncodingEnumTransform implements Transform<Encoding> {
 
     public static final String MIME_TYPE_BZIP2 = "application/x-bzip";
 
+    public static final String MIME_TYPE_BZIP2_ALT = "application/x-bzip2";
+
     @Override
     public Encoding read(final String value) throws Exception {
         if (value.equals(MIME_TYPE_OCTET_STREAM)) {
@@ -26,6 +28,9 @@ public class EncodingEnumTransform implements Transform<Encoding> {
         if (value.equals(MIME_TYPE_BZIP2)) {
             return Encoding.BZIP2;
         }
+        if (value.equals(MIME_TYPE_BZIP2_ALT)) {
+            return Encoding.BZIP2_ALT;
+        }
         return Encoding.NONE;
     }
 
@@ -36,6 +41,8 @@ public class EncodingEnumTransform implements Transform<Encoding> {
                 return MIME_TYPE_GZIP;
             case BZIP2:
                 return MIME_TYPE_BZIP2;
+            case BZIP2_ALT:
+                return MIME_TYPE_BZIP2_ALT;
             case NONE:
                 return MIME_TYPE_OCTET_STREAM;
             default:

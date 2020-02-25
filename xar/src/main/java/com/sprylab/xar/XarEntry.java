@@ -259,11 +259,11 @@ public class XarEntry {
 
         switch (encoding) {
             case NONE:
+            case BZIP2:
+            case BZIP2_ALT:
                 return xarSource.getRange(offset, length);
             case GZIP:
                 return new InflaterSource(xarSource.getRange(offset, length), new Inflater());
-            case BZIP2:
-                // fall through
             default:
                 throw new UnsupportedEncodingException("Encoding not supported: " + encoding.name());
         }

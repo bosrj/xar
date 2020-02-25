@@ -47,6 +47,8 @@ public class XarFileSource implements XarEntrySource {
             this.extractedChecksum = HashUtils.hashHex(fileSource, checksumStyle);
             switch (encoding) {
                 case NONE:
+                case BZIP2:
+                case BZIP2_ALT:
                     this.buffer.writeAll(fileSource);
                     this.archivedChecksum = extractedChecksum;
                     break;
@@ -56,7 +58,7 @@ public class XarFileSource implements XarEntrySource {
                     }
                     this.archivedChecksum = HashUtils.hashHex(this.buffer, checksumStyle);
                     break;
-                case BZIP2:
+                default:
                     throw new UnsupportedEncodingException("Encoding not supported: " + encoding.name());
             }
         }
