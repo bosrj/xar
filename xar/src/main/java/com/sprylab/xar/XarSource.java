@@ -6,18 +6,14 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.zip.Inflater;
 
+import com.sprylab.xar.signing.TocCertificateParser;
+import com.sprylab.xar.signing.checksum.ChecksumProvider;
+import com.sprylab.xar.toc.model.ChecksumAlgorithm;
+import okio.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.sprylab.xar.signing.TocCertificateParser;
-import com.sprylab.xar.signing.checksum.ChecksumProvider;
 import com.sprylab.xar.toc.model.Encoding;
-
-import okio.BufferedSource;
-import okio.ByteString;
-import okio.InflaterSource;
-import okio.Okio;
-import okio.Source;
 
 public abstract class XarSource {
 
@@ -31,10 +27,10 @@ public abstract class XarSource {
 
     private ByteString storedChecksum;
 
-    private boolean forceVerifyCerts;
+    private boolean verifyCerts;
 
     public XarSource() {
-        forceVerifyCerts = false;
+        verifyCerts = false;
     }
 
     /**
@@ -67,14 +63,20 @@ public abstract class XarSource {
     }
 
     /**
-     * If this setting is enabled, the step to extract the certificates for the signature and x-signature while reading the {@link XarToc}
-     * in {@link #getToc()} should succeed, or a {@link XarException} will be thrown. If disabled, this step will fail silently if the certificates cannot
-     * be extracted.
+     * If this setting is enabled, the validity of the underlying certificates for the signature and x-signature is checked while reading the {@link XarToc}.
+     * If the certificates are not valid, a {@link XarException} will be thrown.
      *
-     * @param forceVerifyCerts whether this setting is enabled
+     * @param verifyCerts whether this setting is enabled
      */
-    public void setForceVerifyCerts(final boolean forceVerifyCerts) {
-        this.forceVerifyCerts = forceVerifyCerts;
+    public void setVerifyCerts(final boolean verifyCerts) {
+        this.verifyCerts = verifyCerts;
+    }
+
+    /**
+     * @return Whether the validity of the underlying certificates for signature and x-signature is checked while reading the {@link XarToc}
+     */
+    public boolean isVerifyCerts() {
+        return verifyCerts;
     }
 
     /**
@@ -151,6 +153,15 @@ public abstract class XarSource {
      * @throws XarException when there is an error while reading
      */
     public abstract long getSize() throws XarException;
+
+    /**
+     * Gets the checksum algorithm for this XAR source
+     *
+     * @return the checksum algorithm for this XAR source
+     */
+    public ChecksumAlgorithm getChecksumAlgorithm() {
+        return ChecksumAlgorithm.values()[header.getCksumAlg().intValue()];
+    }
 
     /**
      * Gets all {@link XarEntry}s contained in this file.
@@ -251,7 +262,7 @@ public abstract class XarSource {
             try {
                 checkTocSignature();
             } catch (final XarException e) {
-                if (forceVerifyCerts) {
+                if (verifyCerts) {
                     throw new XarException("Cannot parse signing certificates", e);
                 } else {
                     LOG.info("Could not parse signing certificates, exception suppressed");
@@ -280,8 +291,7 @@ public abstract class XarSource {
     private ByteString createStoredChecksum() throws XarException {
         final long baseOffset = getHeader().getSize().longValue() + header.getTocLengthCompressed().longValue();
 
-        try (final BufferedSource source = getRange(baseOffset,
-                                                    getToc().getChecksum().getSize())) {
+        try (final BufferedSource source = getRange(baseOffset, getToc().getChecksum().getSize())) {
             return source.readByteString(getToc().getChecksum().getSize());
         } catch (final IOException e) {
             throw new XarException("Error reading stored checksum", e);

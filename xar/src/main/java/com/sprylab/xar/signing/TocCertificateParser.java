@@ -19,8 +19,6 @@ import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.SignerInformationVerifier;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
 import org.bouncycastle.operator.OperatorCreationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.sprylab.xar.XarException;
 import com.sprylab.xar.XarSource;
@@ -148,20 +146,71 @@ public class TocCertificateParser {
                                  final ByteString sigBytes)
         throws SignatureException, XarException
     {
+        verifySignature(certificate, signature, checksumAlgorithm, sigBytes, false);
+    }
+
+    /**
+     * Verifies the signature from the ToC with the extracted X.509 certificate
+     *
+     * @param certificate the X.509 certificate to match with the signature
+     * @param signature the signature data from the ToC
+     * @param checksumAlgorithm the checksum algorithm for the source xar
+     * @param sigBytes the binary signature as read from the source ToC
+     * @param digestHeaderInData whether the digest header has been incorporated in the signed data.
+     *                           If this value is false and the signature cannot be verified, a retry will be done
+     *                           with 'true' for this value
+     * @throws SignatureException when there is an error while verifying the signature given the certificate
+     * @throws XarException when there is an error while reading the stored checksum from the source xar
+     */
+    private void verifySignature(final X509Certificate certificate,
+                                 final Signature signature,
+                                 final ChecksumAlgorithm checksumAlgorithm,
+                                 final ByteString sigBytes,
+                                 final boolean digestHeaderInData)
+        throws SignatureException, XarException
+    {
         try {
-            final String signatureStyle = "NONEwith" + signature.getStyle();
+            String digest = !digestHeaderInData ? checksumAlgorithm.toString().toUpperCase() : "NONE";
+            String signatureStyle = digest + "with" + signature.getStyle();
 
             final java.security.Signature sigAlg = java.security.Signature.getInstance(signatureStyle);
             sigAlg.initVerify(certificate.getPublicKey());
-            sigAlg.update(checksumAlgorithm.getDigestHeader().asByteBuffer());
+
+            if (digestHeaderInData) {
+                sigAlg.update(checksumAlgorithm.getDigestHeader().asByteBuffer());
+            }
+
             sigAlg.update(xarSource.getStoredChecksum().asByteBuffer());
 
             if (!sigAlg.verify(sigBytes.toByteArray())) {
-                throw new SignatureException("Signature does not match");
+                if (!digestHeaderInData) {
+                    retryVerifySignature(certificate, signature, checksumAlgorithm, sigBytes);
+                } else {
+                    throw new SignatureException("Signature does not match the checksum");
+                }
             }
         } catch (final NoSuchAlgorithmException | InvalidKeyException e) {
             throw new SignatureException("Signature could not be verified", e);
         }
+    }
+
+    /**
+     * Retries verifying the signature from the ToC with the extracted X.509 certificate
+     *
+     * @param certificate the X.509 certificate to match with the signature
+     * @param signature the signature data from the ToC
+     * @param checksumAlgorithm the checksum algorithm for the source xar
+     * @param sigBytes the binary signature as read from the source ToC
+     * @throws SignatureException when there is an error while verifying the signature given the certificate
+     * @throws XarException when there is an error while reading the stored checksum from the source xar
+     */
+    private void retryVerifySignature(final X509Certificate certificate,
+                                      final Signature signature,
+                                      final ChecksumAlgorithm checksumAlgorithm,
+                                      final ByteString sigBytes)
+        throws SignatureException, XarException
+    {
+        verifySignature(certificate, signature, checksumAlgorithm, sigBytes, true);
     }
 
     /**
@@ -184,14 +233,13 @@ public class TocCertificateParser {
 
             final Collection<SignerInformation> signers = signedData.getSignerInfos().getSigners();
             for (final SignerInformation signer : signers) {
-                final ByteString sign = ByteString.of(signer.getSignature());
                 final SignerInformationVerifier verifier = new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(lastCertHolder);
 
                 if (!signer.verify(verifier)) {
                     throw new SignatureException("Signature does not match");
                 }
             }
-        } catch (final CMSException | OperatorCreationException | java.security.cert.CertificateException e) {
+        } catch (final CMSException | OperatorCreationException | CertificateException e) {
             throw new SignatureException("Invalid CMS signature: " + e.getMessage());
         }
     }

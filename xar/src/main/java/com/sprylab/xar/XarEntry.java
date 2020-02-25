@@ -3,6 +3,7 @@ package com.sprylab.xar;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Date;
@@ -18,6 +19,7 @@ import com.sprylab.xar.toc.model.Type;
 import com.sprylab.xar.utils.HashUtils;
 import com.sprylab.xar.utils.StringUtils;
 
+import com.sprylab.xar.writer.XarEntrySource;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -66,6 +68,8 @@ public class XarEntry {
 
     private XarSource xarSource;
 
+    private String archivedChecksum;
+
     /**
      * Creates a new entry linked to the given {@code xarSource}.
      *
@@ -101,6 +105,10 @@ public class XarEntry {
                 extractedChecksum = data.getExtractedChecksum();
             } else if (data.getUnarchivedChecksum() != null) {
                 extractedChecksum = data.getUnarchivedChecksum();
+            }
+
+            if (data.getArchivedChecksum() != null) {
+                xarEntry.archivedChecksum = data.getArchivedChecksum().getValue();
             }
 
             if (extractedChecksum != null) {
@@ -373,6 +381,64 @@ public class XarEntry {
         }
     }
 
+    public XarEntrySource getEntrySource() {
+        return new XarEntrySource() {
+            @Override
+            public Source getSource() {
+                try {
+                    return xarSource.getRange(offset, length);
+                } catch (final IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+
+            @Override
+            public long getSize() {
+                return size;
+            }
+
+            @Override
+            public String getName() {
+                final int index = name.indexOf('/');
+                if (index < 0) {
+                    return name;
+                } else {
+                    return name.substring(index + 1);
+                }
+            }
+
+            @Override
+            public long getLength() {
+                return length;
+            }
+
+            @Override
+            public long getLastModified() {
+                return time == null ? 0 : time.getTime();
+            }
+
+            @Override
+            public String getExtractedChecksum() {
+                return checksum;
+            }
+
+            @Override
+            public Encoding getEncoding() {
+                return encoding;
+            }
+
+            @Override
+            public ChecksumAlgorithm getChecksumAlgorithm() {
+                return checksumAlgorithm;
+            }
+
+            @Override
+            public String getArchivedChecksum() {
+                return archivedChecksum;
+            }
+        };
+    }
+
     @Override
     public String toString() {
         if (isDirectory) {
@@ -381,5 +447,4 @@ public class XarEntry {
             return String.format("XarEntry{name='%s', size=%d}", name, size);
         }
     }
-
 }

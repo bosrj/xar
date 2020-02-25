@@ -1,6 +1,7 @@
 package com.sprylab.xar;
 
 import java.io.InputStream;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,6 +46,17 @@ public class XarToc {
         try (final InputStream inputStream = xarSource.getToCStream(checksumProvider)) {
             this.model = TocFactory.fromInputStream(inputStream);
             createEntries();
+
+            if (xarSource.isVerifyCerts()) {
+                try {
+                    if (signCertificate != null)
+                        signCertificate.checkValidity();
+                    if (xSignCertificate != null)
+                        xSignCertificate.checkValidity();
+                } catch (final CertificateException e) {
+                    throw new XarException("Signature certificates are no longer valid", e);
+                }
+            }
 
             try {
                 calculatedChecksum = checksumProvider.getChecksum();

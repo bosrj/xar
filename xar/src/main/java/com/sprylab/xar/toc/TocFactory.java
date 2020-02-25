@@ -26,7 +26,17 @@ import com.sprylab.xar.toc.model.Xar;
 public class TocFactory {
 
     private static Serializer createFactory() {
-        final Style style = new HyphenStyle();
+        final Style style = new HyphenStyle(){
+            // Force using the correct style for certain child elements of signature and x-signature
+            @Override
+            public String getElement(final String name) {
+                if (name.startsWith("X509") || name.equals("KeyInfo")) {
+                    return name;
+                } else {
+                    return super.getElement(name);
+                }
+            }
+        };
         final Format format = new Format(style);
         final RegistryMatcher matcher = new RegistryMatcher();
         matcher.bind(Date.class, DateTransform.class);
