@@ -4,6 +4,7 @@ public enum Encoding {
 
     NONE,
     GZIP,
-    BZIP2
+    BZIP2,
+    BZIP2_ALT
 
 }
